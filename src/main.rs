@@ -47,13 +47,27 @@ async fn subscribe() -> mini_redis::Result<()>{
 
     let subscribe = client.subscribe(vec!["numbers".to_string()]).await?;
     // tune a channel numbers using like a mechanisom `subscribe.into_stream()`
-    let message = subscribe.into_stream();
-    tokio::pin!(message);
+    // let message = subscribe.into_stream();
+    // using a take adapter and then done
+    // let messages = subscribe.into_stream().take(3);
+    // filter only singel digit message using filter adapter with match statement.
+    let messages = subscribe.into_stream()
+    .filter(|msg| match msg {
+        Ok(msg)  if msg.content.len() == 1 => true,
+        _=> false
+    }).take(3).map(|msg| msg.unwrap().content);
+    // using filter_map  adapter
+
+ 
+    tokio::pin!(messages);
     // it is like special kind of mechanizom that prevent the freequency dirverions.
 
-    while let Some(msg) = message.next().await {
+    while let Some(msg) = messages.next().await {
         println!("got = {:?}", msg)
     }
+
+
+
 
     Ok(())
 
@@ -69,3 +83,5 @@ async fn main() -> mini_redis::Result<()>{
     println!("DONE");
     Ok(())
 }
+
+// Adapters function take a stream and return another stream are often called stream adapter.
