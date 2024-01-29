@@ -85,3 +85,34 @@ async fn main() -> mini_redis::Result<()>{
 }
 
 // Adapters function take a stream and return another stream are often called stream adapter.
+
+// Implementing Stream trait
+
+/*
+    stream trait is very similar to the Future trait
+*/
+
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+/*
+    Stream trait ekta postbox er moto jekhane somoyer shathe shathe akash letter pathabe ami post office 
+    theke letter receive karbo.
+
+    poll_next() ekta postbox check karar moto, akhash letter pathaise check kara postbox
+    a chithi poiseki na.
+
+    context and waker are like megical notification ja executor ke janabe when might be 
+    new letter and check it again.
+
+    size_hint() as estimating letter count - estimating number of expected letters.
+
+    Delay future like scheduling letters to be delivered at specific intervals.
+*/
+pub trait Stream {
+    type Item;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)->Poll<Option<Self::Item>> ;
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, None)
+    }
+}
