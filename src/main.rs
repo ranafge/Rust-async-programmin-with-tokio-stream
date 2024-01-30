@@ -2,6 +2,7 @@
 
 // streams asynchronous series of values like std::iter::Iterator
 
+use tokio::task::yield_now;
 use tokio_stream::StreamExt;
 //StreamExt trait used to asynchronously iterate over the stream with next().await
 
@@ -21,11 +22,10 @@ use tokio_stream::StreamExt;
 //     }
 // }
 
-
 use mini_redis::client;
 
 async fn publish() -> mini_redis::Result<()> {
-    let addr =  "127.0.0.1:6379";
+    let addr = "127.0.0.1:6379";
     // redis server located at `172.0.0.1` and port `6379`
     let mut client = client::connect(addr).await?;
     // client::connect is part of miniredis that handle the connection logic
@@ -39,10 +39,9 @@ async fn publish() -> mini_redis::Result<()> {
     client.publish("numbers", "five".into()).await?;
     client.publish("numbers", "6".into()).await?;
     Ok(())
-
 }
 // listening message subscribe like a radio receiver in a car or home
-async fn subscribe() -> mini_redis::Result<()>{
+async fn subscribe() -> mini_redis::Result<()> {
     let client = client::connect("127.0.0.1:6379").await?;
 
     let subscribe = client.subscribe(vec!["numbers".to_string()]).await?;
@@ -51,14 +50,16 @@ async fn subscribe() -> mini_redis::Result<()>{
     // using a take adapter and then done
     // let messages = subscribe.into_stream().take(3);
     // filter only singel digit message using filter adapter with match statement.
-    let messages = subscribe.into_stream()
-    .filter(|msg| match msg {
-        Ok(msg)  if msg.content.len() == 1 => true,
-        _=> false
-    }).take(3).map(|msg| msg.unwrap().content);
+    let messages = subscribe
+        .into_stream()
+        .filter(|msg| match msg {
+            Ok(msg) if msg.content.len() == 1 => true,
+            _ => false,
+        })
+        .take(3)
+        .map(|msg| msg.unwrap().content);
     // using filter_map  adapter
 
- 
     tokio::pin!(messages);
     // it is like special kind of mechanizom that prevent the freequency dirverions.
 
@@ -66,23 +67,17 @@ async fn subscribe() -> mini_redis::Result<()>{
         println!("got = {:?}", msg)
     }
 
-
-
-
-    Ok(())
-
-}
-
-#[tokio::main]
-
-async fn main() -> mini_redis::Result<()>{
-    tokio::spawn(async {
-        publish().await
-    });
-    subscribe().await?;
-    println!("DONE");
     Ok(())
 }
+
+// #[tokio::main]
+
+// async fn main() -> mini_redis::Result<()> {
+//     tokio::spawn(async { publish().await });
+//     subscribe().await?;
+//     println!("DONE");
+//     Ok(())
+// }
 
 // Adapters function take a stream and return another stream are often called stream adapter.
 
@@ -92,17 +87,18 @@ async fn main() -> mini_redis::Result<()>{
     stream trait is very similar to the Future trait
 */
 
+use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 /*
-    Stream trait ekta postbox er moto jekhane somoyer shathe shathe akash letter pathabe ami post office 
+    Stream trait ekta postbox er moto jekhane somoyer shathe shathe akash letter pathabe ami post office
     theke letter receive karbo.
 
     poll_next() ekta postbox check karar moto, akhash letter pathaise check kara postbox
     a chithi poiseki na.
 
-    context and waker are like megical notification ja executor ke janabe when might be 
+    context and waker are like megical notification ja executor ke janabe when might be
     new letter and check it again.
 
     size_hint() as estimating letter count - estimating number of expected letters.
@@ -111,8 +107,97 @@ use std::task::{Context, Poll};
 */
 pub trait Stream {
     type Item;
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)->Poll<Option<Self::Item>> ;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>;
     fn size_hint(&self) -> (usize, Option<usize>) {
         (0, None)
     }
 }
+
+
+
+use std::time::{Duration, Instant};
+
+struct Delay {
+    when: Instant,
+}
+impl Future for Delay {
+    type Output = &'static str;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<&'static str> {
+        if Instant::now() >= self.when {
+            println!("Hello world");
+            Poll::Ready("done")
+        } else {
+            // Ignore this line for now.
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    }
+}
+struct Interval {
+    rem: usize,
+    delay: Delay,
+}
+
+impl Interval {
+    fn new() -> Self {
+        Self {
+            rem: 3,
+            delay: Delay {
+                when: Instant::now(),
+            },
+        }
+    }
+}
+
+impl Stream for Interval {
+    type Item = ();
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if self.rem == 0 {
+            return Poll::Ready(None);
+        }
+        // Pin::new takes a pointer as argument that is a future
+        match Pin::new(&mut self.delay).poll(cx) {
+            Poll::Ready(_) => {
+                let when = self.delay.when + Duration::from_millis(10);
+                self.delay = Delay { when };
+                self.rem -= 1;
+                Poll::Ready(Some(()))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+
+use async_stream::stream;
+// #[tokio::main]
+// async fn main() {
+//     let mut when = Instant::now();
+//     for _ in 0..3 {
+//         let delay = Delay {when};
+//         delay.await;
+//         yield_now();
+
+//         when += Duration::from_millis(10);
+//     }
+// }
+
+#[tokio::main]
+async fn main() {
+    let mut when = Instant::now();
+    for _ in 0..10{
+        let delay = Interval {
+            rem: 10,
+            delay: Delay { when }
+        };
+        delay.delay.await;
+        yield_now().await;
+
+    
+
+        when += Duration::from_millis(10);
+    }
+}
+
