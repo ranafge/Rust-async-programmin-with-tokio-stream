@@ -87,7 +87,7 @@ async fn subscribe() -> mini_redis::Result<()> {
     stream trait is very similar to the Future trait
 */
 
-use std::future::{Future, IntoFuture};
+use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -116,7 +116,7 @@ pub trait Stream {
 
 
 use std::time::{Duration, Instant};
-
+#[derive(Debug)]
 struct Delay {
     when: Instant,
 }
@@ -184,20 +184,40 @@ use async_stream::stream;
 //     }
 // }
 
+// #[tokio::main]
+// async fn main() {
+//     let mut when = Instant::now();
+//     for _ in 0..10{
+//         let delay = Interval {
+//             rem: 10,
+//             delay: Delay { when }
+//         };
+//         delay.delay.await;
+//         yield_now().await;
+//         when += Duration::from_millis(10);
+//     }
+// }
+
+
 #[tokio::main]
 async fn main() {
-    let mut when = Instant::now();
-    for _ in 0..10{
-        let delay = Interval {
-            rem: 10,
-            delay: Delay { when }
-        };
-        delay.delay.await;
-        yield_now().await;
-
+    use async_stream::stream;
+    use std::time::{Duration, Instant};
     
-
-        when += Duration::from_millis(10);
-    }
+   let x =  stream! {
+        let mut when = Instant::now();
+        for _ in 0..3 {
+            let delay = Delay { when };
+            delay.await;
+            yield ();
+            when += Duration::from_millis(10);
+        }
+    };
+   let total_stream = x.take(2);
+   tokio::pin!(total_stream);
+   // stream is asynchrous sequentional value like iterator. So use while let instead of for loop. note that for loop is supported stream
+   while let Some(_) = total_stream.next().await  {
+       println!("Receive stream");
+   }
+   
 }
-
